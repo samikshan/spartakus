@@ -137,7 +137,7 @@ const char *show_string(const struct string *string)
 	return buffer;
 }
 
-static const char *show_char(const char *s, size_t len, char prefix, char delim)
+const char *show_char(const char *s, size_t len, char prefix, char delim)
 {
 	static char buffer[MAX_STRING + 4];
 	char *p = buffer;

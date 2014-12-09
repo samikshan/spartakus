@@ -200,6 +200,7 @@ struct symbol {
 	pseudo_t pseudo;
 };
 
+
 /* Modifiers */
 #define MOD_AUTO	0x0001
 #define MOD_REGISTER	0x0002

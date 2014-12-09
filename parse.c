@@ -43,10 +43,14 @@
 #include "scope.h"
 #include "expression.h"
 #include "target.h"
+#include "checksum.h"
 
 static struct symbol_list **function_symbol_list;
 struct symbol_list *function_computed_target_list;
 struct statement_list *function_computed_goto_list;
+struct decl_list *sym_declaration = NULL;
+
+int is_tok_typedef = 0;
 
 static struct token *statement(struct token *token, struct statement **tree);
 static struct token *handle_attributes(struct token *token, struct decl_state *ctx, unsigned int keywords);
@@ -711,6 +715,7 @@ static struct token *struct_union_enum_specifier(enum type type,
 	struct symbol *sym;
 	struct position *repos;
 
+    add_token_name_to_sym_decl(token);
 	token = handle_attributes(token, ctx, KW_ATTRIBUTE);
 	if (token_type(token) == TOKEN_IDENT) {
 		sym = lookup_symbol(token->ident, NS_STRUCT);
@@ -723,7 +728,7 @@ static struct token *struct_union_enum_specifier(enum type type,
 			bind_symbol(sym, token->ident, NS_STRUCT);
 		}
 		if (sym->type != type)
-			error_die(token->pos, "invalid tag applied to %s", show_typename (sym));
+			error_die(token->pos, "invalid tag applied to %s", show_typename(sym));
 		ctx->ctype.base_type = sym;
 		repos = &token->pos;
 		token = token->next;
@@ -731,10 +736,12 @@ static struct token *struct_union_enum_specifier(enum type type,
 			// The following test is actually wrong for empty
 			// structs, but (1) they are not C99, (2) gcc does
 			// the same thing, and (3) it's easier.
+            add_token_name_to_sym_decl(token);
 			if (sym->symbol_list)
 				error_die(token->pos, "redefinition of %s", show_typename (sym));
 			sym->pos = *repos;
 			token = parse(token->next, sym);
+            add_token_name_to_sym_decl(token);
 			token = expect(token, '}', "at end of struct-union-enum-specifier");
 
 			// Mark the structure as needing re-examination
@@ -754,6 +761,7 @@ static struct token *struct_union_enum_specifier(enum type type,
 	sym = alloc_symbol(token->pos, type);
 	token = parse(token->next, sym);
 	ctx->ctype.base_type = sym;
+    add_token_name_to_sym_decl(token);
 	token =  expect(token, '}', "at end of specifier");
 	sym->endpos = token->pos;
 
@@ -1329,7 +1337,7 @@ static struct token *static_specifier(struct token *next, struct decl_state *ctx
 static struct token *extern_specifier(struct token *next, struct decl_state *ctx)
 {
 	set_storage_class(&next->pos, ctx, SExtern);
-	return next;
+    return next;
 }
 
 static struct token *thread_specifier(struct token *next, struct decl_state *ctx)
@@ -1465,10 +1473,12 @@ static struct token *declaration_specifiers(struct token *token, struct decl_sta
 	int size = 0;
 
 	while (token_type(token) == TOKEN_IDENT) {
-		struct symbol *s = lookup_symbol(token->ident,
+        add_token_name_to_sym_decl(token);
+        struct symbol *s = lookup_symbol(token->ident,
 						 NS_TYPEDEF | NS_SYMBOL);
-		if (!s || !(s->namespace & NS_TYPEDEF))
+		if (!s || !(s->namespace & NS_TYPEDEF)) {
 			break;
+        }
 		if (s->type != SYM_KEYWORD) {
 			if (seen & Set_Any)
 				break;
@@ -1500,8 +1510,9 @@ static struct token *declaration_specifiers(struct token *token, struct decl_sta
 			}
 		}
 		token = token->next;
-		if (s->op->declarator)
+		if (s->op->declarator) {
 			token = s->op->declarator(token, ctx);
+        }
 		if (s->op->type & KW_EXACT) {
 			ctx->ctype.base_type = s->ctype.base_type;
 			ctx->ctype.modifiers |= s->ctype.modifiers;
@@ -1860,7 +1871,9 @@ static struct token *struct_declaration_list(struct token *token, struct symbol_
 		if (!match_op(token, ';')) {
 			sparse_error(token->pos, "expected ; at end of declaration");
 			break;
-		}
+		} else {
+            add_token_name_to_sym_decl(token);
+        }
 		token = token->next;
 	}
 	return token;
@@ -2717,18 +2730,28 @@ struct token *external_declaration(struct token *token, struct symbol_list **lis
 	unsigned long mod;
 	int is_typedef;
 
-	/* Top-level inline asm? */
+    struct decl_list *sym_decl;
+
+    /* Top-level inline asm? */
 	if (token_type(token) == TOKEN_IDENT) {
 		struct symbol *s = lookup_keyword(token->ident, NS_KEYWORD);
 		if (s && s->op->toplevel)
 			return s->op->toplevel(token, list);
 	}
+	if (strcmp(show_token(token), "typedef") == 0) {
+        is_tok_typedef = 1;
+    }
 
 	/* Parse declaration-specifiers, if any */
 	token = declaration_specifiers(token, &ctx);
+//     if (is_tok_typedef == 1) {
+//         print_sym_declaration();
+//         is_tok_typedef = 0;
+//     }
+    clear_sym_declaration();
 	mod = storage_modifiers(&ctx);
 	decl = alloc_symbol(token->pos, SYM_NODE);
-	/* Just a type declaration? */
+    /* Just a type declaration? */
 	if (match_op(token, ';')) {
 		apply_modifiers(token->pos, &ctx);
 		return token->next;
@@ -2739,6 +2762,7 @@ struct token *external_declaration(struct token *token, struct symbol_list **lis
 	token = handle_attributes(token, &ctx, KW_ATTRIBUTE | KW_ASM);
 	apply_modifiers(token->pos, &ctx);
 
+    clear_sym_declaration();
 	decl->ctype = ctx.ctype;
 	decl->ctype.modifiers |= mod;
 	decl->endpos = token->pos;
@@ -2759,6 +2783,10 @@ struct token *external_declaration(struct token *token, struct symbol_list **lis
 	bind_symbol(decl, ident, is_typedef ? NS_TYPEDEF: NS_SYMBOL);
 
 	base_type = decl->ctype.base_type;
+
+    if (decl->ident) {
+        add_to_typedef_symtab(decl);
+    }
 
 	if (is_typedef) {
 		if (base_type && !base_type->ident) {
@@ -2833,4 +2861,189 @@ struct token *external_declaration(struct token *token, struct symbol_list **lis
 		}
 	}
 	return expect(token, ';', "at end of declaration");
+}
+
+struct typedef_sym *find_typedef_sym(struct symbol *sym)
+{
+    long unsigned int h = raw_crc32(sym->ident->name) % HASH_BUCKETS;
+    if (typedef_symtab[h] == NULL)
+        return NULL;
+
+    struct typedef_sym *tsym;
+    tsym = (struct typedef_sym *) malloc(sizeof(struct typedef_sym));
+    for (tsym = typedef_symtab[h]; tsym; tsym = tsym->next) {
+        if (strcmp(tsym->name, sym->ident->name) == 0)
+            break;
+    }
+    return tsym;
+}
+
+void add_to_typedef_symtab(struct symbol *decl)
+{
+    struct typedef_sym *tsym = find_typedef_sym(decl);
+    if (tsym != NULL) {
+        return;
+    } else {
+        long unsigned int h = raw_crc32(decl->ident->name) % HASH_BUCKETS;
+        struct typedef_sym *added_sym;
+        if (!typedef_symtab[h]) {
+            added_sym = (struct typedef_sym *) malloc(sizeof(struct typedef_sym));
+            added_sym->name = decl->ident->name;
+            added_sym->next = typedef_symtab[h];
+            typedef_symtab[h] = added_sym;
+        } else {
+            for (tsym = typedef_symtab[h]; tsym->next; tsym = tsym->next);
+            added_sym = (struct typedef_sym *) malloc(sizeof(struct typedef_sym));
+            added_sym->name = decl->ident->name;
+            added_sym->next = tsym->next;
+            tsym->next = added_sym;
+        }
+    }
+}
+
+void display_typedef_symtab()
+{
+    printf("\nHash table storing symbols as an array of linked list:\n");
+    int i;
+    struct typedef_sym *tsym;
+    for (i = 0; i < HASH_BUCKETS; i++) {
+        tsym = typedef_symtab[i];
+        if (tsym == 0) continue;
+        else {
+            while (tsym) {
+                printf("%s --> ", tsym->name);
+                if (tsym->next) {
+                    tsym = tsym->next;
+                }
+                else
+                    break;
+            }
+            printf("\n");
+        }
+    }
+}
+
+int is_table_empty()
+{
+    int h, result = 1;
+    for (h=0; h<HASH_BUCKETS; h++) {
+        if (typedef_symtab[h] == 0)
+            continue;
+        else {
+            result = 0;
+            break;
+        }
+    }
+    return result;
+}
+
+void clear_typedef_symtab()
+{
+    struct typedef_sym *cur, *next;
+    int h;
+
+    if (is_table_empty())
+        return;
+
+    for (h=0; h<HASH_BUCKETS; h++) {
+        cur = typedef_symtab[h];
+        if (cur == NULL) continue;
+
+        while (cur) {
+            if (cur->next) {
+                next = cur->next;
+                cur->next = NULL;
+                free(cur);
+                typedef_symtab[h] = next;
+                cur = typedef_symtab[h];
+            } else {
+                free(cur);
+                typedef_symtab[h] = NULL;
+                break;
+            }
+        }
+    }
+}
+
+void add_token_name_to_sym_decl(struct token *tok)
+{
+    if (is_tok_typedef == 0) // Add only typedef symbol declarations
+        return;
+
+    char *tok_name;
+    if (tok->ident) {
+        if (token_type(tok) == TOKEN_STRING) {
+            tok_name = show_char(tok->string->data,
+            tok->string->length - 1, 0, '"');
+        } else if (token_type(tok) == TOKEN_SPECIAL) {
+            if (match_op(tok, ';'))
+                tok_name = ";";
+            else if (match_op(tok, '{'))
+                tok_name = "{";
+            else if (match_op(tok, '}'))
+                tok_name = "}";
+            else if (match_op(tok, ','))
+                tok_name = ",";
+            else
+                tok_name = show_special(tok->special);
+        } else {
+            tok_name = tok->ident->name;
+        }
+    } else {
+        printf("Token has no ident\n");
+        return;
+    }
+
+    struct decl_list *dec, *temp;
+
+    if (sym_declaration == NULL) { // Empty declaration
+        sym_declaration = (struct decl_list *) malloc(sizeof(struct decl_list));
+        sym_declaration->str = tok_name;
+        sym_declaration->next = NULL;
+        return;
+    }
+
+    dec = (struct decl_list *) malloc(sizeof(struct decl_list));
+    if (dec == NULL){
+        fprintf(stderr, "Unable to allocate memory\n");
+        exit(-1);
+    }
+
+    dec->str = tok_name;
+    dec->next = NULL;
+
+    temp = sym_declaration;
+    while(temp->next != NULL) {
+        temp = temp->next;
+    }
+    temp->next = dec;
+    temp = dec;
+    temp->next = NULL;
+}
+
+void print_sym_declaration()
+{
+    struct decl_list *temp;
+    if (sym_declaration == NULL)
+        return;
+
+    temp = sym_declaration;
+    while (temp != NULL) {
+        printf("%s ", temp->str);
+        temp = temp->next;
+    }
+    printf(";\n");
+}
+
+void clear_sym_declaration()
+{
+    if (sym_declaration == NULL)
+        return;
+    while (sym_declaration != NULL) {
+        struct decl_list *temp;
+        temp = sym_declaration;
+        sym_declaration = temp->next;
+        temp->next = NULL;
+        free(temp);
+    }
 }

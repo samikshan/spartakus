@@ -27,6 +27,8 @@
 
 #include "symbol.h"
 
+#define HASH_BUCKETS  2048
+
 enum statement_type {
 	STMT_NONE,
 	STMT_DECLARATION,
@@ -128,6 +130,20 @@ struct statement {
 	};
 };
 
+
+struct decl_list { /* Data structure to store symbol declaration */
+    char *str;
+    struct decl_list *next; /* Next part of symbol declaration */
+};
+
+struct typedef_sym {
+    char *name;
+    struct decl_list *defn;
+    struct typedef_sym *next;
+};
+
+struct typedef_sym *typedef_symtab[HASH_BUCKETS];
+
 extern struct symbol_list *function_computed_target_list;
 extern struct statement_list *function_computed_goto_list;
 
@@ -146,5 +162,10 @@ extern void copy_statement(struct statement *src, struct statement *dst);
 extern int inline_function(struct expression *expr, struct symbol *sym);
 extern void uninline(struct symbol *sym);
 extern void init_parser(int);
+
+void display_typedef_symtab();
+void clear_typedef_symtab();
+void add_token_name_to_sym_decl(struct token * tok);
+void print_sym_declaration();
 
 #endif /* PARSE_H */
