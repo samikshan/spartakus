@@ -2923,7 +2923,7 @@ void display_typedef_symtab()
     }
 }
 
-int is_table_empty()
+static int is_table_empty()
 {
     int h, result = 1;
     for (h=0; h<HASH_BUCKETS; h++) {
@@ -2963,6 +2963,11 @@ void clear_typedef_symtab()
             }
         }
     }
+}
+
+struct typedef_sym *get_typedef_syms()
+{
+    return typedef_symtab;
 }
 
 void add_token_name_to_sym_decl(struct token *tok)

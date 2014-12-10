@@ -163,9 +163,10 @@ extern int inline_function(struct expression *expr, struct symbol *sym);
 extern void uninline(struct symbol *sym);
 extern void init_parser(int);
 
+struct typedef_sym *get_typedef_syms();
 void display_typedef_symtab();
 void clear_typedef_symtab();
-void add_token_name_to_sym_decl(struct token * tok);
-void print_sym_declaration();
+static void add_token_name_to_sym_decl(struct token * tok);
+static void print_sym_declaration();
 
 #endif /* PARSE_H */

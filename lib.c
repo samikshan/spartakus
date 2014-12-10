@@ -987,7 +987,7 @@ static struct symbol_list *sparse_tokenstream(struct token *token)
 	clear_typedef_symtab();
 	while (!eof_token(token))
 		token = external_declaration(token, &translation_unit_used_list);
-	display_typedef_symtab();
+// 	display_typedef_symtab();
     return translation_unit_used_list;
 }
 
