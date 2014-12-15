@@ -51,8 +51,7 @@ MAN1DIR=$(MANDIR)/man1
 INCLUDEDIR=$(PREFIX)/include
 PKGCONFIGDIR=$(LIBDIR)/pkgconfig
 
-PROGRAMS=test-lexing test-parsing obfuscate compile graph sparse \
-	 test-linearize example test-unssa test-dissect ctags check_kabi
+PROGRAMS=obfuscate compile graph sparse ctags check_kabi
 INST_PROGRAMS=sparse cgcc
 INST_MAN1=sparse.1 cgcc.1
 

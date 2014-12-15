@@ -49,8 +49,13 @@ static struct symbol_list **function_symbol_list;
 struct symbol_list *function_computed_target_list;
 struct statement_list *function_computed_goto_list;
 struct decl_list *sym_declaration = NULL;
+struct typedef_sym *typedef_symtab[HASH_BUCKETS];
+struct sym_using_typedef *symbols_using_typedefs[HASH_BUCKETS];
 
-int is_tok_typedef = 0;
+int is_tok_typedef = 0;  /* Is it a typedef declaration */
+int is_type_typedef = 0; /* Is the symbol is of some typedef type */
+
+struct typedef_sym *symtype_typedef; /* typedef set as a type for another symbol */
 
 static struct token *statement(struct token *token, struct statement **tree);
 static struct token *handle_attributes(struct token *token, struct decl_state *ctx, unsigned int keywords);
@@ -1476,10 +1481,17 @@ static struct token *declaration_specifiers(struct token *token, struct decl_sta
         add_token_name_to_sym_decl(token);
         struct symbol *s = lookup_symbol(token->ident,
 						 NS_TYPEDEF | NS_SYMBOL);
-		if (!s || !(s->namespace & NS_TYPEDEF)) {
+		if (!s || !(s->namespace & NS_TYPEDEF)) { /* Never seen this */
 			break;
         }
-		if (s->type != SYM_KEYWORD) {
+		if (s->type != SYM_KEYWORD) { /* Seen this token before */
+            if (token->ident) {
+                symtype_typedef = find_typedef_sym_by_name(token->ident->name);
+                if (symtype_typedef) {
+//                     printf("Motherfucker!!!!! %s\n", symtype_typedef->name);
+                    is_type_typedef = 1;
+                }
+            }
 			if (seen & Set_Any)
 				break;
 			seen |= Set_S | Set_T;
@@ -1488,7 +1500,7 @@ static struct token *declaration_specifiers(struct token *token, struct decl_sta
 			token = token->next;
 			continue;
 		}
-		if (s->op->type & KW_SPECIFIER) {
+		if (s->op->type & KW_SPECIFIER) { /* Keyword specifier */
 			if (seen & s->op->test) {
 				specifier_conflict(token->pos,
 						   seen & s->op->test,
@@ -1860,6 +1872,9 @@ static struct token *declaration_list(struct token *token, struct symbol_list **
 		token = token->next;
 		ctx.ctype = saved;
 	}
+//     clear_typedef_symtab();
+//     is_tok_typedef = 0;
+//     is_type_typedef = 0;
 	return token;
 }
 
@@ -2688,6 +2703,7 @@ static struct token *parse_k_r_arguments(struct token *token, struct symbol *dec
 	warning(token->pos, "non-ANSI definition of function '%s'", show_ident(decl->ident));
 	do {
 		token = declaration_list(token, &args);
+        
 		if (!match_op(token, ';')) {
 			sparse_error(token->pos, "expected ';' at end of parameter declaration");
 			break;
@@ -2744,48 +2760,114 @@ struct token *external_declaration(struct token *token, struct symbol_list **lis
 
 	/* Parse declaration-specifiers, if any */
 	token = declaration_specifiers(token, &ctx);
-//     if (is_tok_typedef == 1) {
-//         print_sym_declaration();
-//         is_tok_typedef = 0;
-//     }
-    clear_sym_declaration();
-	mod = storage_modifiers(&ctx);
-	decl = alloc_symbol(token->pos, SYM_NODE);
-    /* Just a type declaration? */
-	if (match_op(token, ';')) {
-		apply_modifiers(token->pos, &ctx);
-		return token->next;
-	}
+    char *tok_name;
+            if (token_type(token) == TOKEN_STRING) {
+                tok_name = show_char(token->string->data,
+                token->string->length - 1, 0, '"');
+            } else if (token_type(token) == TOKEN_SPECIAL) {
+                if (match_op(token, ';'))
+                    tok_name = ";";
+                else if (match_op(token, '{'))
+                    tok_name = "{";
+                else if (match_op(token, '}'))
+                    tok_name = "}";
+                else if (match_op(token, ','))
+                    tok_name = ",";
+                else
+                    tok_name = show_special(token->special);
+            } else {
+                tok_name = token->ident->name;
+            }
+    if (is_tok_typedef == 1) {
+        printf("Tok_typedef\n");
+        if (is_type_typedef == 1 && token->ident) {
+            add_typedef_type_sym(tok_name, symtype_typedef);
+            is_type_typedef = 0;
+        }
+        print_sym_declaration();
+        mod = storage_modifiers(&ctx);
+        decl = alloc_symbol(token->pos, SYM_NODE);
+        /* Just a type declaration? */
+        if (match_op(token, ';')) {
+            apply_modifiers(token->pos, &ctx);
+            return token->next;
+        }
 
-	saved = ctx.ctype;
-	token = declarator(token, &ctx);
-	token = handle_attributes(token, &ctx, KW_ATTRIBUTE | KW_ASM);
-	apply_modifiers(token->pos, &ctx);
+        saved = ctx.ctype;
+        token = declarator(token, &ctx);
+        token = handle_attributes(token, &ctx, KW_ATTRIBUTE | KW_ASM);
+        apply_modifiers(token->pos, &ctx);
 
-    clear_sym_declaration();
-	decl->ctype = ctx.ctype;
-	decl->ctype.modifiers |= mod;
-	decl->endpos = token->pos;
+        clear_sym_declaration();
+        decl->ctype = ctx.ctype;
+        decl->ctype.modifiers |= mod;
+        decl->endpos = token->pos;
 
-	/* Just a type declaration? */
-	if (!ident) {
-		warning(token->pos, "missing identifier in declaration");
-		return expect(token, ';', "at the end of type declaration");
-	}
+        /* Just a type declaration? */
+        if (!ident) {
+            warning(token->pos, "missing identifier in declaration");
+            return expect(token, ';', "at the end of type declaration");
+        }
 
-	/* type define declaration? */
-	is_typedef = ctx.storage_class == STypedef;
+        /* type define declaration? */
+        is_typedef = ctx.storage_class == STypedef;
 
-	/* Typedefs don't have meaningful storage */
-	if (is_typedef)
-		decl->ctype.modifiers |= MOD_USERTYPE;
+        /* Typedefs don't have meaningful storage */
+        if (is_typedef)
+            decl->ctype.modifiers |= MOD_USERTYPE;
 
-	bind_symbol(decl, ident, is_typedef ? NS_TYPEDEF: NS_SYMBOL);
+        bind_symbol(decl, ident, is_typedef ? NS_TYPEDEF: NS_SYMBOL);
 
-	base_type = decl->ctype.base_type;
+        base_type = decl->ctype.base_type;
 
-    if (decl->ident) {
-        add_to_typedef_symtab(decl);
+        if (decl->ident) {
+            add_to_typedef_symtab(decl);
+        }
+        is_tok_typedef = 0;
+    } else {
+        printf("No_tok_typedef\n");
+        if (is_type_typedef == 1 && token->ident) {
+            printf("type typedef %s\n", symtype_typedef->name);
+//             printf("Symbol is of type typedef %s!\n", token->ident->name, symtype_typedef->name);
+//             add_typedef_type_sym(token, symtype_typedef);
+            add_typedef_type_sym(tok_name, symtype_typedef);
+            is_type_typedef = 0;
+        }
+        print_sym_declaration();
+        mod = storage_modifiers(&ctx);
+        decl = alloc_symbol(token->pos, SYM_NODE);
+        /* Just a type declaration? */
+        if (match_op(token, ';')) {
+            apply_modifiers(token->pos, &ctx);
+            return token->next;
+        }
+
+        saved = ctx.ctype;
+        token = declarator(token, &ctx);
+        token = handle_attributes(token, &ctx, KW_ATTRIBUTE | KW_ASM);
+        apply_modifiers(token->pos, &ctx);
+
+        clear_sym_declaration();
+        decl->ctype = ctx.ctype;
+        decl->ctype.modifiers |= mod;
+        decl->endpos = token->pos;
+
+        /* Just a type declaration? */
+        if (!ident) {
+            warning(token->pos, "missing identifier in declaration");
+            return expect(token, ';', "at the end of type declaration");
+        }
+
+        /* type define declaration? */
+        is_typedef = ctx.storage_class == STypedef;
+
+        /* Typedefs don't have meaningful storage */
+        if (is_typedef)
+            decl->ctype.modifiers |= MOD_USERTYPE;
+
+        bind_symbol(decl, ident, is_typedef ? NS_TYPEDEF: NS_SYMBOL);
+
+        base_type = decl->ctype.base_type;
     }
 
 	if (is_typedef) {
@@ -2865,6 +2947,9 @@ struct token *external_declaration(struct token *token, struct symbol_list **lis
 
 struct typedef_sym *find_typedef_sym(struct symbol *sym)
 {
+    if (sym->ident == NULL)
+        return NULL;
+
     long unsigned int h = raw_crc32(sym->ident->name) % HASH_BUCKETS;
     if (typedef_symtab[h] == NULL)
         return NULL;
@@ -2873,6 +2958,21 @@ struct typedef_sym *find_typedef_sym(struct symbol *sym)
     tsym = (struct typedef_sym *) malloc(sizeof(struct typedef_sym));
     for (tsym = typedef_symtab[h]; tsym; tsym = tsym->next) {
         if (strcmp(tsym->name, sym->ident->name) == 0)
+            break;
+    }
+    return tsym;
+}
+
+struct typedef_sym *find_typedef_sym_by_name(char *symname)
+{
+    long unsigned int h = raw_crc32(symname) % HASH_BUCKETS;
+    if (typedef_symtab[h] == NULL)
+        return NULL;
+
+    struct typedef_sym *tsym;
+    tsym = (struct typedef_sym *) malloc(sizeof(struct typedef_sym));
+    for (tsym = typedef_symtab[h]; tsym; tsym = tsym->next) {
+        if (strcmp(tsym->name, symname) == 0)
             break;
     }
     return tsym;
@@ -2965,10 +3065,104 @@ void clear_typedef_symtab()
     }
 }
 
-struct typedef_sym *get_typedef_syms()
+struct sym_using_typedef *find_sym_using_typedef(char *symname)
 {
-    return typedef_symtab;
+    long unsigned int h = raw_crc32(symname) % HASH_BUCKETS;
+    if (symbols_using_typedefs[h] == NULL)
+        return NULL;
+
+    struct sym_using_typedef *tsym;
+    tsym = (struct sym_using_typedef *) malloc(sizeof(struct sym_using_typedef));
+    for (tsym = symbols_using_typedefs[h]; tsym; tsym = tsym->next) {
+        if (strcmp(tsym->name, symname) == 0)
+            break;
+    }
+    return tsym;
 }
+
+void add_typedef_type_sym(char *symname, struct typedef_sym *type)
+{
+    printf("Here!\n");
+    if (!symname || !type->name) {
+        printf("Hehehe\n");
+        return;
+    }
+    struct sym_using_typedef *sym = find_sym_using_typedef(symname);
+    if (sym != NULL) {
+        printf("Symbol found\n");
+        return;
+    } else {
+        printf("Adding symbol %s that uses typedef %s\n", symname, type->name);
+        long unsigned int h = raw_crc32(symname) % HASH_BUCKETS;
+        struct sym_using_typedef *added_sym;
+        if (!symbols_using_typedefs[h]) {
+            added_sym = (struct typedef_sym *) malloc(sizeof(struct typedef_sym));
+            added_sym->name = symname;
+            added_sym->type = type;
+            added_sym->next = symbols_using_typedefs[h];
+            symbols_using_typedefs[h] = added_sym;
+        } else {
+            for (sym = symbols_using_typedefs[h]; sym->next; sym = sym->next);
+            added_sym = (struct sym_using_typedef *) malloc(sizeof(struct sym_using_typedef));
+            added_sym->name = symname;
+            added_sym->type = type;
+            added_sym->next = sym->next;
+            sym->next = added_sym;
+        }
+    }
+    printf("End!\n");
+}
+
+void display_syms_using_typedefs()
+{
+    printf("\nHash table storing symbols using typedefs\n");
+    int i;
+    struct sym_using_typedef *tsym;
+    for (i = 0; i < HASH_BUCKETS; i++) {
+        tsym = symbols_using_typedefs[i];
+        if (tsym == 0) continue;
+        else {
+            while (tsym) {
+                printf("%s --> ", tsym->name);
+                if (tsym->next) {
+                    tsym = tsym->next;
+                }
+                else
+                    break;
+            }
+            printf("\n");
+        }
+    }
+}
+
+/*
+void add_typedef_type_sym(struct typedef_sym *tsym, char *symname)
+{
+    if (tsym->symlist == NULL) { // No symbol has used this typedef so far
+        printf("No symbol has used this typedef so far\n");
+        tsym->symlist = (struct strlist *) malloc(sizeof(struct strlist));
+        tsym->symlist->str = symname;
+        tsym->symlist->next = NULL;
+        return;
+    }
+    struct strlist *temp, *newsym;
+    newsym = (struct strlist *) malloc(sizeof(struct strlist));
+    if (newsym == NULL) {
+        fprintf(stderr, "Unable to allocate memory\n");
+        exit(-1);
+    }
+    newsym->str = symname;
+    newsym->next = NULL;
+
+    temp = tsym->symlist;
+    while(temp->next != NULL)
+        temp = temp->next;
+
+    temp->next = newsym;
+    temp = newsym;
+    temp->next = NULL;
+}*/
+
 
 void add_token_name_to_sym_decl(struct token *tok)
 {
@@ -2976,6 +3170,7 @@ void add_token_name_to_sym_decl(struct token *tok)
         return;
 
     char *tok_name;
+    enum token_type tok_type = token_type(tok);
     if (tok->ident) {
         if (token_type(tok) == TOKEN_STRING) {
             tok_name = show_char(tok->string->data,
@@ -3004,6 +3199,7 @@ void add_token_name_to_sym_decl(struct token *tok)
     if (sym_declaration == NULL) { // Empty declaration
         sym_declaration = (struct decl_list *) malloc(sizeof(struct decl_list));
         sym_declaration->str = tok_name;
+        sym_declaration->tok_type = tok_type;
         sym_declaration->next = NULL;
         return;
     }
@@ -3015,6 +3211,7 @@ void add_token_name_to_sym_decl(struct token *tok)
     }
 
     dec->str = tok_name;
+    dec->tok_type = tok_type;
     dec->next = NULL;
 
     temp = sym_declaration;

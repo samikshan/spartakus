@@ -133,16 +133,30 @@ struct statement {
 
 struct decl_list { /* Data structure to store symbol declaration */
     char *str;
+    enum token_type tok_type;
     struct decl_list *next; /* Next part of symbol declaration */
+};
+
+struct strlist {
+    char *str;
+    struct strlist *next;
 };
 
 struct typedef_sym {
     char *name;
+//     struct strlist *symlist;
     struct decl_list *defn;
     struct typedef_sym *next;
 };
 
-struct typedef_sym *typedef_symtab[HASH_BUCKETS];
+struct sym_using_typedef {
+    char *name;
+    struct typedef_sym *type;
+    struct sym_using_typedef *next;
+};
+
+extern struct typedef_sym *typedef_symtab[HASH_BUCKETS];
+extern struct sym_using_typedef *symbols_using_typedefs[HASH_BUCKETS];
 
 extern struct symbol_list *function_computed_target_list;
 extern struct statement_list *function_computed_goto_list;
@@ -164,7 +178,10 @@ extern void uninline(struct symbol *sym);
 extern void init_parser(int);
 
 struct typedef_sym *get_typedef_syms();
+struct typedef_sym *find_typedef_sym(struct symbol *sym);
+struct typedef_sym *find_typedef_sym_by_name(char *symname);
 void display_typedef_symtab();
+void display_syms_using_typedefs();
 void clear_typedef_symtab();
 static void add_token_name_to_sym_decl(struct token * tok);
 static void print_sym_declaration();

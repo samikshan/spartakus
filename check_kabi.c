@@ -26,6 +26,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include "lib.h"
 #include "allocate.h"
 #include "parse.h"
 #include "symbol.h"
@@ -364,8 +365,32 @@ long unsigned int process_array(struct symbol *sym, long unsigned int crc, int i
     return crc;
 }
 
+long unsigned int process_typedef(struct typedef_sym *tsym, long unsigned int crc)
+{
+    struct decl_list *defn = tsym->defn;
+    printf("%s\n", tsym->name);
+    while (defn != NULL) {
+        if (defn->str) {
+            printf("Gandu!\n");
+            crc = crc32(defn->str, crc);
+        } else {
+            printf("STFU!\n");
+        }
+        printf("Gandu!\n");
+        defn = defn->next;
+    }
+    return crc;
+}
+
 long unsigned int process_symbol(struct symbol *sym, long unsigned int crc, int is_fn_param)
 {
+    // First check if symbol was originally a typedef
+    struct typedef_sym *tsym = find_typedef_sym(sym);
+    if (tsym) { /* Symbol was a typedef */
+        crc = process_typedef(tsym, crc);
+        return crc;
+    }
+
     if (sym->type == SYM_NODE) {
         if (sym->ctype.base_type->type == SYM_PTR &&
             sym->ctype.base_type->ctype.base_type->type == SYM_FN) {
@@ -495,10 +520,12 @@ void process_files(struct string_list* filelist)
     FOR_EACH_PTR_NOTAG(filelist, file)
     {
         symlist = sparse(file);
+//         display_typedef_symtab();
         clean_up_symbols(symlist);
         populate_exp_symlist(symlist);
         process_symlist(symlist);
         //display_sym_table();
+        clear_typedef_symtab();
     }END_FOR_EACH_PTR_NOTAG(file);
 }
 
@@ -509,6 +536,7 @@ int main(int argc, char **argv)
 
     symlist = sparse_initialize(argc, argv, &filelist);
     clean_up_symbols(symlist);
+    clear_typedef_symtab();
     process_files(filelist);
 
     return 0;
