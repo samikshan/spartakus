@@ -38,6 +38,8 @@
 static struct symb *symtab[HASH_BUCKETS];
 static struct symbol_list *exported_symbols;
 
+struct sym_using_typedef *tsym;
+
 static void clean_up_symbols(struct symbol_list *list)
 {
     struct symbol *sym;
@@ -365,30 +367,36 @@ long unsigned int process_array(struct symbol *sym, long unsigned int crc, int i
     return crc;
 }
 
-long unsigned int process_typedef(struct typedef_sym *tsym, long unsigned int crc)
+long unsigned int process_typedef(struct typedef_sym *symtype, long unsigned int crc)
 {
-    struct decl_list *defn = tsym->defn;
-    printf("%s\n", tsym->name);
-    while (defn != NULL) {
+    printf("Processing typedef %s\n", symtype->name);
+    struct decl_list *defn = symtype->defn;
+    while (defn) {
         if (defn->str) {
-            printf("Gandu!\n");
             crc = crc32(defn->str, crc);
-        } else {
-            printf("STFU!\n");
         }
-        printf("Gandu!\n");
         defn = defn->next;
     }
     return crc;
 }
 
+long unsigned int process_symbol_using_typedef(struct symbol *sym, long unsigned int crc)
+{
+    printf("Symbol %s uses typedef defined type %s\n", sym->ident->name, tsym->type->name);
+    struct typedef_sym *symtype = tsym->type;
+    crc = process_typedef(symtype, crc);
+    return crc;
+}
+
 long unsigned int process_symbol(struct symbol *sym, long unsigned int crc, int is_fn_param)
 {
-    // First check if symbol was originally a typedef
-    struct typedef_sym *tsym = find_typedef_sym(sym);
-    if (tsym) { /* Symbol was a typedef */
-        crc = process_typedef(tsym, crc);
-        return crc;
+    // First check if symbol has a typedef defined type
+    if (sym->ident) {
+        tsym = find_sym_using_typedef(sym->ident->name);
+        if (tsym) { /* Symbol's type is defined by a typedef*/
+            crc = process_symbol_using_typedef(sym, crc);
+            return crc;
+        }
     }
 
     if (sym->type == SYM_NODE) {
@@ -408,7 +416,7 @@ long unsigned int process_symbol(struct symbol *sym, long unsigned int crc, int 
 
     enum type symtype;
 
-    if (sym->ident != NULL)
+//     if (sym->ident != NULL)
         //printf("Symbol: %s | Type: %s\n", sym->ident->name, sym_type(sym));
     symtype = sym->type;
 
