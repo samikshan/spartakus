@@ -472,8 +472,6 @@ long unsigned int process_symbol(struct symbol *sym, long unsigned int crc, int 
             sprintf(bitfield_width, "%d", sym->bit_size);
             crc = crc32(bitfield_width, crc);
             break;
-        case SYM_TYPEDEF:
-            break;
         case SYM_BASETYPE:
             if (is_fn_param == 0) {
                 if (sym->ident != NULL)

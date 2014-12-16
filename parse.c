@@ -1489,7 +1489,6 @@ static struct token *declaration_specifiers(struct token *token, struct decl_sta
             if (token->ident) {
                 symtype_typedef = find_typedef_sym_by_name(token->ident->name);
                 if (symtype_typedef) {
-//                     printf("Motherfucker!!!!! %s\n", symtype_typedef->name);
                     is_type_typedef = 1;
                 }
             }
@@ -1850,6 +1849,7 @@ static struct token *declaration_list(struct token *token, struct symbol_list **
 	struct ctype saved;
 	unsigned long mod;
 
+    is_type_typedef = 0;
 	token = declaration_specifiers(token, &ctx);
 	mod = storage_modifiers(&ctx);
 	saved = ctx.ctype;
@@ -1868,14 +1868,16 @@ static struct token *declaration_list(struct token *token, struct symbol_list **
 		decl->ctype.modifiers |= mod;
 		decl->endpos = token->pos;
 		add_symbol(list, decl);
+        if (is_type_typedef == 1) {
+            add_typedef_type_sym(decl->ident->name, symtype_typedef);
+            is_type_typedef = 0;
+            symtype_typedef = NULL;
+        }
 		if (!match_op(token, ','))
 			break;
 		token = token->next;
 		ctx.ctype = saved;
 	}
-//     clear_typedef_symtab();
-//     is_tok_typedef = 0;
-//     is_type_typedef = 0;
 	return token;
 }
 
@@ -1887,9 +1889,9 @@ static struct token *struct_declaration_list(struct token *token, struct symbol_
 		if (!match_op(token, ';')) {
 			sparse_error(token->pos, "expected ; at end of declaration");
 			break;
-		} else {
+		} /*else {
             add_token_name_to_sym_decl(token);
-        }
+        }*/
 		token = token->next;
 	}
 	return token;
