@@ -100,7 +100,7 @@ static unsigned long crc32(const char *s, unsigned long int crc)
 {
     crc = partial_crc32(s, crc);
     crc = partial_crc32_one(' ', crc);
-    //printf("%s : 0x%08lx ;\n", s, crc);
+    printf("%s : 0x%08lx ;\n", s, crc);
     return crc;
 }
 

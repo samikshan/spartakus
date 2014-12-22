@@ -38,7 +38,8 @@
 static struct symb *symtab[HASH_BUCKETS];
 static struct symbol_list *exported_symbols;
 
-struct sym_using_typedef *tsym;
+struct sym_using_typedef *tsym = NULL;
+struct symbol *parsym = NULL; /* Parent sym for struct members */
 
 static void clean_up_symbols(struct symbol_list *list)
 {
@@ -276,6 +277,7 @@ long unsigned int process_struct(struct symbol *sym, long unsigned int crc, int 
     crc = crc32("{", crc);
     FOR_EACH_PTR(members, member) {
         member_count = member_count + 1;
+        parsym = sym;
         crc = process_symbol(member, crc, is_fn_param);
         crc = crc32(";", crc);
     }END_FOR_EACH_PTR(member);
@@ -382,9 +384,10 @@ long unsigned int process_typedef(struct typedef_sym *symtype, long unsigned int
 
 long unsigned int process_symbol_using_typedef(struct symbol *sym, long unsigned int crc)
 {
-    printf("Symbol %s uses typedef defined type %s\n", sym->ident->name, tsym->type->name);
+//     printf("Symbol %s uses typedef defined type %s\n", sym->ident->name, tsym->type->name);
     struct typedef_sym *symtype = tsym->type;
     crc = process_typedef(symtype, crc);
+    crc = crc32(sym->ident->name, crc);
     return crc;
 }
 
@@ -392,9 +395,10 @@ long unsigned int process_symbol(struct symbol *sym, long unsigned int crc, int 
 {
     // First check if symbol has a typedef defined type
     if (sym->ident) {
-        tsym = find_sym_using_typedef(sym->ident->name);
-        if (tsym) { /* Symbol's type is defined by a typedef*/
+        tsym = find_sym_using_typedef(sym->ident->name, parsym);
+        if (tsym != NULL) { /* Symbol's type is defined by a typedef */
             crc = process_symbol_using_typedef(sym, crc);
+            parsym = NULL;
             return crc;
         }
     }

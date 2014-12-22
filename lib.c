@@ -989,7 +989,7 @@ static struct symbol_list *sparse_tokenstream(struct token *token)
 		token = external_declaration(token, &translation_unit_used_list);
 //         printf("######################################################\n");
     }
-//     display_typedef_symtab();
+    display_typedef_symtab();
 //     display_syms_using_typedefs();
     return translation_unit_used_list;
 }

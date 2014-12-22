@@ -137,20 +137,15 @@ struct decl_list { /* Data structure to store symbol declaration */
     struct decl_list *next; /* Next part of symbol declaration */
 };
 
-struct strlist {
-    char *str;
-    struct strlist *next;
-};
-
 struct typedef_sym {
     char *name;
-//     struct strlist *symlist;
     struct decl_list *defn;
     struct typedef_sym *next;
 };
 
 struct sym_using_typedef {
     char *name;
+    struct symbol *parent;
     struct typedef_sym *type;
     struct sym_using_typedef *next;
 };
@@ -179,7 +174,7 @@ extern void init_parser(int);
 
 struct typedef_sym *find_typedef_sym(struct symbol *sym);
 struct typedef_sym *find_typedef_sym_by_name(char *symname);
-struct sym_using_typedef *find_sym_using_typedef(char *symname);
+struct sym_using_typedef *find_sym_using_typedef(char *symname, struct symbol *parent);
 
 void display_typedef_symtab();
 void display_syms_using_typedefs();

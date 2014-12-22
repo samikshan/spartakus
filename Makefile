@@ -82,16 +82,16 @@ ifneq ($(HAVE_LLVM_VERSION),yes)
 $(warning LLVM 3.0 or later required. Your system has version $(LLVM_VERSION) installed.)
 HAVE_LLVM=no
 else
-LLVM_PROGS := sparse-llvm
-$(LLVM_PROGS): LD := g++
-LLVM_LDFLAGS := $(shell $(LLVM_CONFIG) --ldflags)
-LLVM_CFLAGS := $(shell $(LLVM_CONFIG) --cflags | sed -e "s/-DNDEBUG//g")
-LLVM_LIBS := $(shell $(LLVM_CONFIG) --libs)
-LLVM_LIBS += $(shell llvm-config --system-libs 2>/dev/null)
-PROGRAMS += $(LLVM_PROGS)
-INST_PROGRAMS += sparse-llvm sparsec
-sparse-llvm.o: BASIC_CFLAGS += $(LLVM_CFLAGS)
-sparse-llvm_EXTRA_OBJS := $(LLVM_LIBS) $(LLVM_LDFLAGS)
+# LLVM_PROGS := sparse-llvm
+# $(LLVM_PROGS): LD := g++
+# LLVM_LDFLAGS := $(shell $(LLVM_CONFIG) --ldflags)
+# LLVM_CFLAGS := $(shell $(LLVM_CONFIG) --cflags | sed -e "s/-DNDEBUG//g")
+# LLVM_LIBS := $(shell $(LLVM_CONFIG) --libs)
+# LLVM_LIBS += $(shell llvm-config --system-libs 2>/dev/null)
+# PROGRAMS += $(LLVM_PROGS)
+# INST_PROGRAMS += sparsec
+# sparse-llvm.o: BASIC_CFLAGS += $(LLVM_CFLAGS)
+# sparse-llvm_EXTRA_OBJS := $(LLVM_LIBS) $(LLVM_LDFLAGS)
 endif
 endif
 
