@@ -351,6 +351,8 @@ long unsigned int process_array(struct symbol *sym, long unsigned int crc, int i
         case SYM_PTR:
             subsym->ident = sym->ident;
             crc = process_symbol(subsym, crc, is_fn_param);
+            if (sym->ident != NULL)
+                crc = crc32(sym->ident->name, crc);
             break;
         case SYM_UNION:
         case SYM_STRUCT:
@@ -406,6 +408,10 @@ long unsigned int process_symbol(struct symbol *sym, long unsigned int crc, int 
     if (sym->type == SYM_NODE) {
         if (sym->ctype.base_type->type == SYM_PTR &&
             sym->ctype.base_type->ctype.base_type->type == SYM_FN) {
+            if (sym->ident != NULL)
+                sym->ctype.base_type->ident = sym->ident;
+            crc = process_symbol(sym->ctype.base_type, crc, is_fn_param);
+        } else if (sym->ctype.base_type->type == SYM_ARRAY) {
             if (sym->ident != NULL)
                 sym->ctype.base_type->ident = sym->ident;
             crc = process_symbol(sym->ctype.base_type, crc, is_fn_param);
