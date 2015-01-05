@@ -377,7 +377,15 @@ long unsigned int process_typedef(struct typedef_sym *symtype, long unsigned int
     struct decl_list *defn = symtype->defn;
     while (defn) {
         if (defn->str) {
-            crc = crc32(defn->str, crc);
+            struct typedef_sym *tsym = find_typedef_sym_by_name(defn->str);
+            if (tsym) {
+                if (strcmp(symtype->name, tsym->name) == 0)
+                    crc = crc32(defn->str, crc);
+                else
+                    crc = process_typedef(tsym, crc);
+            } else {
+                crc = crc32(defn->str, crc);
+            }
         }
         defn = defn->next;
     }
@@ -395,7 +403,6 @@ long unsigned int process_symbol_using_typedef(struct symbol *sym, long unsigned
 
 long unsigned int process_symbol(struct symbol *sym, long unsigned int crc, int is_fn_param)
 {
-    // First check if symbol has a typedef defined type
     if (sym->ident) {
         tsym = find_sym_using_typedef(sym->ident->name, parsym);
         if (tsym != NULL) { /* Symbol's type is defined by a typedef */
