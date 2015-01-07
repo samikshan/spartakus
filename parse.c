@@ -1728,7 +1728,7 @@ static struct token *direct_declarator(struct token *token, struct decl_state *c
 	struct ident **p = ctx->ident;
 
 	if (ctx->ident && token_type(token) == TOKEN_IDENT) {
-		*ctx->ident = token->ident;
+        *ctx->ident = token->ident;
 		token = token->next;
 	} else if (match_op(token, '(') &&
 	    is_nested(token, &next, ctx->prefer_abstract)) {
@@ -1857,10 +1857,15 @@ static struct token *declaration_list(struct token *token, struct symbol *par, s
 		struct symbol *decl = alloc_symbol(token->pos, SYM_NODE);
 		ctx.ident = &decl->ident;
 
-		token = declarator(token, &ctx);
+        struct decl_list *sym_decl_backup = backup_sym_declaration(sym_declaration);
         clear_sym_declaration(&sym_declaration);
-		if (match_op(token, ':'))
+
+        token = declarator(token, &ctx);
+		if (match_op(token, ':')) {
 			token = handle_bitfield(token, &ctx);
+            is_type_typedef = 0;
+        }
+        clear_sym_declaration(&sym_declaration);
 
 		token = handle_attributes(token, &ctx, KW_ATTRIBUTE);
 		apply_modifiers(token->pos, &ctx);
@@ -1869,6 +1874,7 @@ static struct token *declaration_list(struct token *token, struct symbol *par, s
 		decl->ctype.modifiers |= mod;
 		decl->endpos = token->pos;
 		add_symbol(list, decl);
+        sym_declaration = sym_decl_backup;
         if (is_type_typedef == 1) {
             if (par == NULL) { /* Function parameter list */
                 symtype_typedef = NULL;
@@ -1895,7 +1901,9 @@ static struct token *struct_declaration_list(struct token *token, struct symbol 
 		if (!match_op(token, ';')) {
 			sparse_error(token->pos, "expected ; at end of declaration");
 			break;
-		}
+		} else {
+            add_token_name_to_sym_decl(token); // Add ';' to end struct member declaration
+        }
 		token = token->next;
 	}
 	return token;
@@ -1915,6 +1923,8 @@ static struct token *parameter_declaration(struct token *token, struct symbol *s
 	sym->ctype.modifiers |= storage_modifiers(&ctx);
 	sym->endpos = token->pos;
 	sym->forced_arg = ctx.storage_class == SForced;
+    is_type_typedef = 0;
+    symtype_typedef = NULL;
 	return token;
 }
 
@@ -1926,6 +1936,8 @@ struct token *typename(struct token *token, struct symbol **p, int *forced)
 	*p = sym;
 	token = declaration_specifiers(token, &ctx);
 	token = declarator(token, &ctx);
+    is_type_typedef = 0;
+    symtype_typedef = NULL;
 	apply_modifiers(token->pos, &ctx);
 	sym->ctype = ctx.ctype;
 	sym->endpos = token->pos;
@@ -2584,7 +2596,8 @@ struct token *initializer(struct expression **tree, struct token *token)
 	if (match_op(token, '{')) {
 		struct expression *expr = alloc_expression(token->pos, EXPR_INITIALIZER);
 		*tree = expr;
-		token = initializer_list(&expr->expr_list, token->next);
+
+        token = initializer_list(&expr->expr_list, token->next);
 		return expect(token, '}', "at end of initializer");
 	}
 	return assignment_expression(token, tree);
@@ -2662,6 +2675,8 @@ static struct token *parse_function_body(struct token *token, struct symbol *dec
 			} END_FOR_EACH_PTR(stmt);
 		}
 	}
+	is_type_typedef = 0;
+    symtype_typedef = NULL;
 	return expect(token, '}', "at end of function");
 }
 
@@ -2720,10 +2735,14 @@ static struct token *parse_k_r_arguments(struct token *token, struct symbol *dec
 
 	apply_k_r_types(args, decl);
 
+    is_type_typedef = 0;
+    symtype_typedef = NULL;
 	if (!match_op(token, '{')) {
 		sparse_error(token->pos, "expected function body");
 		return token;
 	}
+	is_type_typedef = 0;
+    symtype_typedef = NULL;
 	return parse_function_body(token, decl, list);
 }
 
@@ -2783,13 +2802,15 @@ struct token *external_declaration(struct token *token, struct symbol_list **lis
         else
             tok_name = show_special(token->special);
     } else {
-        tok_name = token->ident->name;
+        if (token->ident)
+            tok_name = token->ident->name;
     }
 
     if (is_tok_typedef == 1) {
         if (is_type_typedef == 1 && token->ident) {
             add_typedef_type_sym(tok_name, NULL, symtype_typedef);
             is_type_typedef = 0;
+            symtype_typedef = NULL;
         }
 
         mod = storage_modifiers(&ctx);
@@ -2797,6 +2818,8 @@ struct token *external_declaration(struct token *token, struct symbol_list **lis
         /* Just a type declaration? */
         if (match_op(token, ';')) {
             apply_modifiers(token->pos, &ctx);
+            is_type_typedef = 0;
+            symtype_typedef = NULL;
             return token->next;
         }
 
@@ -2815,6 +2838,8 @@ struct token *external_declaration(struct token *token, struct symbol_list **lis
         /* Just a type declaration? */
         if (!ident) {
             warning(token->pos, "missing identifier in declaration");
+            is_type_typedef = 0;
+            symtype_typedef = NULL;
             return expect(token, ';', "at the end of type declaration");
         }
 
@@ -2831,6 +2856,7 @@ struct token *external_declaration(struct token *token, struct symbol_list **lis
 
         if (decl->ident) {
             sym_declaration = sym_decl_backup;
+            add_token_name_to_sym_decl(token); // Add ';' to end symbol declaration
             add_to_typedef_symtab(decl);
             clear_sym_declaration(&sym_declaration);
         }
@@ -2839,12 +2865,15 @@ struct token *external_declaration(struct token *token, struct symbol_list **lis
         if (is_type_typedef == 1 && token->ident) {
             add_typedef_type_sym(tok_name, NULL, symtype_typedef);
             is_type_typedef = 0;
+            symtype_typedef = NULL;
         }
         mod = storage_modifiers(&ctx);
         decl = alloc_symbol(token->pos, SYM_NODE);
         /* Just a type declaration? */
         if (match_op(token, ';')) {
             apply_modifiers(token->pos, &ctx);
+            is_type_typedef = 0;
+            symtype_typedef = NULL;
             return token->next;
         }
 
@@ -2863,6 +2892,8 @@ struct token *external_declaration(struct token *token, struct symbol_list **lis
         /* Just a type declaration? */
         if (!ident) {
             warning(token->pos, "missing identifier in declaration");
+            is_type_typedef = 0;
+            symtype_typedef = NULL;
             return expect(token, ';', "at the end of type declaration");
         }
 
@@ -2930,6 +2961,8 @@ struct token *external_declaration(struct token *token, struct symbol_list **lis
 		token = declarator(token, &ctx);
 		token = handle_attributes(token, &ctx, KW_ATTRIBUTE | KW_ASM);
         clear_sym_declaration(&sym_declaration);
+        is_type_typedef = 0;
+        symtype_typedef = NULL;
 		apply_modifiers(token->pos, &ctx);
 		decl->ctype = ctx.ctype;
 		decl->ctype.modifiers |= mod;
@@ -2975,6 +3008,7 @@ struct typedef_sym *find_typedef_sym(struct symbol *sym)
 
 struct typedef_sym *find_typedef_sym_by_name(char *symname)
 {
+//     printf("Finding %s\n", symname);
     long unsigned int h = raw_crc32(symname) % HASH_BUCKETS;
     if (typedef_symtab[h] == NULL)
         return NULL;
@@ -3251,18 +3285,19 @@ void print_sym_declaration()
         printf("%s ", temp->str);
         temp = temp->next;
     }
-    printf(";\n");
 }
 
 void clear_sym_declaration(struct decl_list **sym_decl)
 {
+//     printf("Clearing declaration: ");
+//     print_sym_declaration();
+//     printf("\n");
     struct decl_list *cur, *next;
     cur = *sym_decl;
     while (cur != NULL) {
         next = cur->next;
         free(cur);
         cur = next;
-//         *sym_decl = cur;
     }
     *sym_decl = NULL;
 }

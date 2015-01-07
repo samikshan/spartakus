@@ -394,7 +394,7 @@ long unsigned int process_typedef(struct typedef_sym *symtype, long unsigned int
 
 long unsigned int process_symbol_using_typedef(struct symbol *sym, long unsigned int crc)
 {
-//     printf("Symbol %s uses typedef defined type %s\n", sym->ident->name, tsym->type->name);
+    printf("Symbol %s uses typedef defined type %s\n", sym->ident->name, tsym->type->name);
     struct typedef_sym *symtype = tsym->type;
     crc = process_typedef(symtype, crc);
     crc = crc32(sym->ident->name, crc);
@@ -423,9 +423,14 @@ long unsigned int process_symbol(struct symbol *sym, long unsigned int crc, int 
                 sym->ctype.base_type->ident = sym->ident;
             crc = process_symbol(sym->ctype.base_type, crc, is_fn_param);
         } else {
-            crc = process_symbol(sym->ctype.base_type, crc, is_fn_param);
-            if (sym->ident != NULL && is_fn_param == 0)
-                crc = crc32(sym->ident->name, crc);
+            if (sym->ctype.base_type->type == SYM_FN) {
+                sym->ctype.base_type->ident = sym->ident;
+                crc = process_symbol(sym->ctype.base_type, crc, is_fn_param);
+            } else {
+                crc = process_symbol(sym->ctype.base_type, crc, is_fn_param);
+                if (sym->ident != NULL && is_fn_param == 0)
+                    crc = crc32(sym->ident->name, crc);
+            }
         }
 
         return crc;
@@ -465,6 +470,7 @@ long unsigned int process_symbol(struct symbol *sym, long unsigned int crc, int 
             break;
         case SYM_FN:
             crc = process_symbol(sym->ctype.base_type, crc, 0);
+            crc = crc32(sym->ident->name, crc);
             params = sym->arguments;
             crc = crc32("(", crc);
             crc = process_params(params, crc);
