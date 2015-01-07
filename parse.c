@@ -891,6 +891,7 @@ static struct token *parse_enum_declaration(struct token *token, struct symbol *
 		struct expression *expr = NULL;
 		struct token *next = token->next;
 		struct symbol *sym;
+        add_token_name_to_sym_decl(token);
 
 		if (match_op(next, '=')) {
 			next = constant_expression(next->next, &expr);
@@ -966,6 +967,8 @@ static struct token *parse_enum_declaration(struct token *token, struct symbol *
 
 		if (!match_op(token, ','))
 			break;
+        else
+            add_token_name_to_sym_decl(token);
 		token = token->next;
 	}
 	if (!base_type) {
