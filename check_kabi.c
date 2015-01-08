@@ -397,6 +397,8 @@ long unsigned int process_symbol_using_typedef(struct symbol *sym, long unsigned
     printf("Symbol %s uses typedef defined type %s\n", sym->ident->name, tsym->type->name);
     struct typedef_sym *symtype = tsym->type;
     crc = process_typedef(symtype, crc);
+    if (sym->ctype.base_type->type == SYM_PTR)
+        crc = crc32("*", crc);
     crc = crc32(sym->ident->name, crc);
     return crc;
 }

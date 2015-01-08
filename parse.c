@@ -2859,7 +2859,7 @@ struct token *external_declaration(struct token *token, struct symbol_list **lis
 
         if (decl->ident) {
             sym_declaration = sym_decl_backup;
-            add_token_name_to_sym_decl(token); // Add ';' to end symbol declaration
+//             add_token_name_to_sym_decl(token); // Add ';' to end symbol declaration
             add_to_typedef_symtab(decl);
             clear_sym_declaration(&sym_declaration);
         }
