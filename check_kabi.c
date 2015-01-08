@@ -324,6 +324,9 @@ long unsigned int process_pointer(struct symbol *sym, long unsigned int crc, int
         crc = crc32(")", crc);
     } else {
         switch(subsymtype) {
+            case SYM_PTR:
+                crc = process_pointer(subsym, crc, 0);
+                break;
             case SYM_UNION:
             case SYM_STRUCT:
                 crc = process_symbol(subsym, crc, 0);
