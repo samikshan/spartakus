@@ -43,7 +43,7 @@ BASIC_CFLAGS += -Wp,-MD,$(@D)/.$(@F).d
 endif
 
 DESTDIR=
-PREFIX=$(HOME)
+PREFIX=/usr
 BINDIR=$(PREFIX)/bin
 LIBDIR=$(PREFIX)/lib
 MANDIR=$(PREFIX)/share/man
@@ -52,7 +52,7 @@ INCLUDEDIR=$(PREFIX)/include
 PKGCONFIGDIR=$(LIBDIR)/pkgconfig
 
 PROGRAMS=obfuscate compile graph sparse ctags check_kabi
-INST_PROGRAMS=sparse cgcc
+INST_PROGRAMS=sparse cgcc check_kabi
 INST_MAN1=sparse.1 cgcc.1
 
 ifeq ($(HAVE_LIBXML),yes)
