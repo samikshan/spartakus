@@ -37,6 +37,7 @@
 
 static struct symb *symtab[HASH_BUCKETS];
 static struct symbol_list *exported_symbols;
+static struct expanded_typedef *expanded_typedefs = NULL;
 
 struct sym_using_typedef *tsym = NULL;
 struct symbol *parsym = NULL; /* Parent sym for struct members */
@@ -374,18 +375,74 @@ long unsigned int process_array(struct symbol *sym, long unsigned int crc, int i
     return crc;
 }
 
+struct expanded_typedef * find_expanded_typedef(struct typedef_sym *tsym)
+{
+    if (expanded_typedefs == NULL)
+        return NULL;
+    struct expanded_typedef *exp_tsym = expanded_typedefs;
+    while(exp_tsym != NULL) {
+        if (strcmp(exp_tsym->tsym->name, tsym->name) == 0)
+            return exp_tsym;
+        exp_tsym = exp_tsym->next;
+    }
+    return NULL;
+}
+
+void add_to_expanded_typedefs(struct typedef_sym *tsym)
+{
+    if (expanded_typedefs == NULL)
+    {
+        expanded_typedefs = (struct typedef_sym *) malloc(sizeof(struct typedef_sym));
+        expanded_typedefs->tsym = tsym;
+        expanded_typedefs->next = NULL;
+        return;
+    }
+    if (find_expanded_typedef(tsym) != NULL)
+        return;
+
+    struct expanded_typedef *exp_tsym, *temp;
+    exp_tsym = (struct expanded_typedef *) malloc(sizeof(struct expanded_typedef));
+    if (exp_tsym == NULL){
+        fprintf(stderr, "Unable to allocate memory\n");
+        exit(-1);
+    }
+    exp_tsym->tsym = tsym;
+    exp_tsym->next = NULL;
+
+    temp = expanded_typedefs;
+    while (temp->next != NULL)
+        temp = temp->next;
+    temp->next = exp_tsym;
+    temp = exp_tsym;
+    temp->next = NULL;
+}
+
+void clear_expanded_typedef_list()
+{
+    struct expanded_typedef *cur, *next;
+    cur = expanded_typedefs;
+    while (cur != NULL) {
+        next = cur->next;
+        free(cur);
+        cur = next;
+    }
+    expanded_typedefs = NULL;
+}
+
 long unsigned int process_typedef(struct typedef_sym *symtype, long unsigned int crc)
 {
-    printf("Processing typedef %s\n", symtype->name);
+//     printf("Processing typedef %s\n", symtype->name);
     struct decl_list *defn = symtype->defn;
     while (defn) {
         if (defn->str) {
             struct typedef_sym *tsym = find_typedef_sym_by_name(defn->str);
             if (tsym) {
-                if (strcmp(symtype->name, tsym->name) == 0)
+                if (strcmp(symtype->name, tsym->name) == 0) // Prevent infinite recursion
                     crc = crc32(defn->str, crc);
-                else
+                else {
                     crc = process_typedef(tsym, crc);
+                    add_to_expanded_typedefs(tsym);
+                }
             } else {
                 crc = crc32(defn->str, crc);
             }
@@ -397,12 +454,28 @@ long unsigned int process_typedef(struct typedef_sym *symtype, long unsigned int
 
 long unsigned int process_symbol_using_typedef(struct symbol *sym, long unsigned int crc)
 {
-    printf("Symbol %s uses typedef defined type %s\n", sym->ident->name, tsym->type->name);
+//     printf("Symbol %s uses typedef defined type %s\n", sym->ident->name, tsym->type->name);
     struct typedef_sym *symtype = tsym->type;
-    crc = process_typedef(symtype, crc);
+    if (find_expanded_typedef(tsym->type) == NULL) {
+        crc = process_typedef(symtype, crc);
+        add_to_expanded_typedefs(symtype);
+    } else {
+        crc = crc32(tsym->type->name, crc);
+    }
+
     if (sym->ctype.base_type->type == SYM_PTR)
         crc = crc32("*", crc);
+
     crc = crc32(sym->ident->name, crc);
+
+    if (sym->ctype.base_type->type == SYM_ARRAY) {
+        char array_size[256];
+        sprintf(array_size, "%lld", get_expression_value_silent(sym->ctype.base_type->array_size));
+        crc = crc32("[", crc);
+        if (strcmp(array_size, "0") != 0)
+            crc = crc32(array_size, crc);
+        crc = crc32("]", crc);
+    }
     return crc;
 }
 
@@ -523,6 +596,7 @@ void process_symlist(struct symbol_list *symlist)
             long unsigned int crc = process_symbol(sym,
                                                    0xffffffff, 0) ^ 0xffffffff;
             printf("__crc_%s = 0x%08lx ;\n", sym->ident->name, crc);
+            clear_expanded_typedef_list();
             clear_sym_table();
         }
     }END_FOR_EACH_PTR(sym);

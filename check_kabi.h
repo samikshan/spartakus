@@ -26,6 +26,11 @@ struct symb {
     struct symb *next;
 };
 
+struct expanded_typedef {
+    struct typedef_sym *tsym;
+    struct expanded_typedef *next;
+};
+
 // Checks if a string starts with a particular string
 int starts_with(const char *, const char *);
 
