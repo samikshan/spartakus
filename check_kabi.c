@@ -433,6 +433,10 @@ long unsigned int process_typedef(struct typedef_sym *symtype, long unsigned int
 {
 //     printf("Processing typedef %s\n", symtype->name);
     struct decl_list *defn = symtype->defn;
+    if (find_expanded_typedef(symtype) != NULL) {
+        crc = crc32(symtype->name, crc);
+        return crc;
+    }
     while (defn) {
         if (defn->str) {
             struct typedef_sym *tsym = find_typedef_sym_by_name(defn->str);
