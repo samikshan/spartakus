@@ -279,7 +279,9 @@ long unsigned int process_struct(struct symbol *sym, long unsigned int crc, int 
     FOR_EACH_PTR(members, member) {
         member_count = member_count + 1;
         parsym = sym;
+//         printf("Next member to process: %s\n", member->ident->name);
         crc = process_symbol(member, crc, is_fn_param);
+        printf("Done!\n");
         crc = crc32(";", crc);
     }END_FOR_EACH_PTR(member);
     if (member_count == 0) {
@@ -358,9 +360,12 @@ long unsigned int process_array(struct symbol *sym, long unsigned int crc, int i
             if (sym->ident != NULL)
                 crc = crc32(sym->ident->name, crc);
             break;
+        case SYM_ENUM:
         case SYM_UNION:
         case SYM_STRUCT:
             crc = process_symbol(subsym, crc, is_fn_param);
+            if (sym->ident != NULL)
+                crc = crc32(sym->ident->name, crc);
             break;
         case SYM_BASETYPE:
             crc = crc32(sym_type(subsym), crc);
@@ -458,7 +463,7 @@ long unsigned int process_typedef(struct typedef_sym *symtype, long unsigned int
 
 long unsigned int process_symbol_using_typedef(struct symbol *sym, long unsigned int crc)
 {
-//     printf("Symbol %s uses typedef defined type %s\n", sym->ident->name, tsym->type->name);
+    printf("Symbol %s uses typedef defined type %s\n", sym->ident->name, tsym->type->name);
     struct typedef_sym *symtype = tsym->type;
     if (find_expanded_typedef(tsym->type) == NULL) {
         crc = process_typedef(symtype, crc);
