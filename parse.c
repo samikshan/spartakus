@@ -56,6 +56,7 @@ int is_tok_typedef = 0;  /* Is it a typedef declaration */
 int is_type_typedef = 0; /* Is the symbol is of some typedef type */
 
 struct typedef_sym *symtype_typedef; /* typedef set as a type for another symbol */
+static struct par_sym *parsym = NULL;
 
 static struct token *statement(struct token *token, struct statement **tree);
 static struct token *handle_attributes(struct token *token, struct decl_state *ctx, unsigned int keywords);
@@ -611,6 +612,31 @@ const char *ignored_attributes[] = {
 	"__weak__",
 };
 
+char *token_str(struct token *tok)
+{
+    char *tok_name = NULL;
+    enum token_type tok_type = token_type(tok);
+    if (tok->ident) {
+        if (token_type(tok) == TOKEN_STRING) {
+            tok_name = show_char(tok->string->data,
+            tok->string->length - 1, 0, '"');
+        } else if (token_type(tok) == TOKEN_SPECIAL) {
+            if (match_op(tok, ';'))
+                tok_name = ";";
+            else if (match_op(tok, '{'))
+                tok_name = "{";
+            else if (match_op(tok, '}'))
+                tok_name = "}";
+            else if (match_op(tok, ','))
+                tok_name = ",";
+            else
+                tok_name = show_special(tok->special);
+        } else {
+            tok_name = tok->ident->name;
+        }
+    }
+    return tok_name;
+}
 
 void init_parser(int stream)
 {
@@ -669,7 +695,7 @@ struct statement *alloc_statement(struct position pos, int type)
 	return stmt;
 }
 
-static struct token *struct_declaration_list(struct token *token, struct symbol *par, struct symbol_list **list);
+static struct token *struct_declaration_list(struct token *token, struct par_sym *par, struct symbol_list **list);
 
 static void apply_modifiers(struct position pos, struct decl_state *ctx)
 {
@@ -777,7 +803,13 @@ static struct token *parse_struct_declaration(struct token *token, struct symbol
 {
 	struct symbol *field, *last = NULL;
 	struct token *res;
-	res = struct_declaration_list(token, sym, &sym->symbol_list);
+    struct par_sym *parsym = NULL;
+    if (sym->ident) {
+        parsym = (struct par_sym *) malloc(sizeof(struct par_sym));
+        parsym->name = sym->ident->name;
+        parsym->sym_type = SYM_STRUCT;
+    }
+	res = struct_declaration_list(token, parsym, &sym->symbol_list);
 	FOR_EACH_PTR(sym->symbol_list, field) {
 		if (!field->ident) {
 			struct symbol *base = field->ctype.base_type;
@@ -793,7 +825,13 @@ static struct token *parse_struct_declaration(struct token *token, struct symbol
 
 static struct token *parse_union_declaration(struct token *token, struct symbol *sym)
 {
-	return struct_declaration_list(token, sym, &sym->symbol_list);
+    struct par_sym *parsym = NULL;
+    if (sym->ident) {
+        parsym = (struct par_sym *) malloc(sizeof(struct par_sym));
+        parsym->name = sym->ident->name;
+        parsym->sym_type = SYM_UNION;
+    }
+	return struct_declaration_list(token, parsym, &sym->symbol_list);
 }
 
 static struct token *struct_specifier(struct token *token, struct decl_state *ctx)
@@ -1731,6 +1769,11 @@ static struct token *direct_declarator(struct token *token, struct decl_state *c
 	struct ident **p = ctx->ident;
 
 	if (ctx->ident && token_type(token) == TOKEN_IDENT) {
+        parsym = (struct par_sym *) malloc(sizeof(struct par_sym));
+        if (token->ident) {
+            parsym->name = token->ident->name;
+            parsym->sym_type = SYM_FN;
+        }
         *ctx->ident = token->ident;
 		token = token->next;
 	} else if (match_op(token, '(') &&
@@ -1756,6 +1799,7 @@ static struct token *direct_declarator(struct token *token, struct decl_state *c
 			token = identifier_list(token, fn);
 		else if (kind == Proto)
 			token = parameter_type_list(token, fn);
+        parsym = NULL;
 		token = expect(token, ')', "in function declarator");
 		fn->endpos = token->pos;
 		return token;
@@ -1846,7 +1890,7 @@ static struct token *handle_bitfield(struct token *token, struct decl_state *ctx
 	return token;
 }
 
-static struct token *declaration_list(struct token *token, struct symbol *par, struct symbol_list **list)
+static struct token *declaration_list(struct token *token, struct par_sym *par, struct symbol_list **list)
 {
 	struct decl_state ctx = {.prefer_abstract = 0};
 	struct ctype saved;
@@ -1896,7 +1940,7 @@ static struct token *declaration_list(struct token *token, struct symbol *par, s
 	return token;
 }
 
-static struct token *struct_declaration_list(struct token *token, struct symbol *par, struct symbol_list **list)
+static struct token *struct_declaration_list(struct token *token, struct par_sym *par, struct symbol_list **list)
 {
 	while (!match_op(token, '}')) {
 		if (!match_op(token, ';'))
@@ -1918,7 +1962,13 @@ static struct token *parameter_declaration(struct token *token, struct symbol *s
 
 	token = declaration_specifiers(token, &ctx);
 	ctx.ident = &sym->ident;
-	token = declarator(token, &ctx);
+
+    if (is_type_typedef == 1) {
+        add_typedef_type_sym(token_str(token), parsym, symtype_typedef);
+        symtype_typedef = NULL;
+        is_type_typedef = 0;
+    }
+    token = declarator(token, &ctx);
     clear_sym_declaration(&sym_declaration);
 	token = handle_attributes(token, &ctx, KW_ATTRIBUTE);
 	apply_modifiers(token->pos, &ctx);
@@ -3121,7 +3171,7 @@ void clear_typedef_symtab()
     }
 }
 
-struct sym_using_typedef *find_sym_using_typedef(char *symname, struct symbol *parent)
+struct sym_using_typedef *find_sym_using_typedef(char *symname, struct par_sym *parent)
 {
     long unsigned int h = raw_crc32(symname) % HASH_BUCKETS;
     if (symbols_using_typedefs[h] == NULL) {
@@ -3135,14 +3185,14 @@ struct sym_using_typedef *find_sym_using_typedef(char *symname, struct symbol *p
                 tsym = tsym->next;
                 continue;
             } else {
-                if (parent->ident && tsym->parent->ident) {
-                    if (strcmp(tsym->name, symname) == 0 &&
-                        strcmp(tsym->parent->ident->name, parent->ident->name) == 0)
-                        break;
-                    else {
-                        tsym = tsym->next;
-                        continue;
-                    }
+                if (strcmp(tsym->name, symname) == 0 &&
+                    strcmp(tsym->parent->name, parent->name) == 0 &&
+                    tsym->parent->sym_type == parent->sym_type) {
+                    break;
+                }
+                else {
+                    tsym = tsym->next;
+                    continue;
                 }
             }
         } else {
@@ -3155,13 +3205,12 @@ struct sym_using_typedef *find_sym_using_typedef(char *symname, struct symbol *p
     return tsym;
 }
 
-void add_typedef_type_sym(char *symname, struct symbol *parent, struct typedef_sym *type)
+void add_typedef_type_sym(char *symname, struct par_sym *parent, struct typedef_sym *type)
 {
     struct sym_using_typedef *sym = find_sym_using_typedef(symname, parent);
     if (sym != NULL) {
         return;
     } else {
-//         printf("Adding symbol %s that uses typedef %s\n", symname, type->name);
         long unsigned int h = raw_crc32(symname) % HASH_BUCKETS;
         struct sym_using_typedef *added_sym;
         added_sym = (struct sym_using_typedef *) malloc(sizeof(struct sym_using_typedef));

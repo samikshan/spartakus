@@ -143,9 +143,14 @@ struct typedef_sym {
     struct typedef_sym *next;
 };
 
+struct par_sym {
+    char *name;
+    enum type sym_type;
+};
+
 struct sym_using_typedef {
     char *name;
-    struct symbol *parent;
+    struct par_sym *parent;
     struct typedef_sym *type;
     struct sym_using_typedef *next;
 };
@@ -174,7 +179,7 @@ extern void init_parser(int);
 
 struct typedef_sym *find_typedef_sym(struct symbol *sym);
 struct typedef_sym *find_typedef_sym_by_name(char *symname);
-struct sym_using_typedef *find_sym_using_typedef(char *symname, struct symbol *parent);
+struct sym_using_typedef *find_sym_using_typedef(char *symname, struct par_sym *parent);
 
 void display_typedef_symtab();
 void display_syms_using_typedefs();

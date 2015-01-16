@@ -40,7 +40,20 @@ static struct symbol_list *exported_symbols;
 static struct expanded_typedef *expanded_typedefs = NULL;
 
 struct sym_using_typedef *tsym = NULL;
-struct symbol *parsym = NULL; /* Parent sym for struct members */
+struct par_sym *parsym = NULL; /* Parent sym for struct/union members or function parameters */
+
+static void alloc_parsym(struct symbol *sym, enum type sym_type)
+{
+    if (sym->ident) {
+        if (parsym)
+            free(parsym);
+        parsym = (struct par_sym *) malloc(sizeof(struct par_sym));
+        parsym->name = sym->ident->name;
+        parsym->sym_type = sym_type;
+    } else {
+        parsym = NULL;
+    }
+}
 
 static void clean_up_symbols(struct symbol_list *list)
 {
@@ -134,6 +147,7 @@ const char *sym_type(struct symbol *sym)
         case SYM_TYPEDEF:
             return show_typename(sym);
     }
+    return NULL;
 }
 
 struct symb *find_sym(struct symbol *sym)
@@ -278,7 +292,7 @@ long unsigned int process_struct(struct symbol *sym, long unsigned int crc, int 
     crc = crc32("{", crc);
     FOR_EACH_PTR(members, member) {
         member_count = member_count + 1;
-        parsym = sym;
+        alloc_parsym(sym, SYM_STRUCT);
         crc = process_symbol(member, crc, is_fn_param);
         crc = crc32(";", crc);
     }END_FOR_EACH_PTR(member);
@@ -457,7 +471,7 @@ long unsigned int process_typedef(struct typedef_sym *symtype, long unsigned int
     return crc;
 }
 
-long unsigned int process_symbol_using_typedef(struct symbol *sym, long unsigned int crc)
+long unsigned int process_symbol_using_typedef(struct symbol *sym, long unsigned int crc, int is_fn_param)
 {
 //     printf("Symbol %s uses typedef defined type %s\n", sym->ident->name, tsym->type->name);
     struct typedef_sym *symtype = tsym->type;
@@ -471,7 +485,8 @@ long unsigned int process_symbol_using_typedef(struct symbol *sym, long unsigned
     if (sym->ctype.base_type->type == SYM_PTR)
         crc = crc32("*", crc);
 
-    crc = crc32(sym->ident->name, crc);
+    if (is_fn_param == 0)
+        crc = crc32(sym->ident->name, crc);
 
     if (sym->ctype.base_type->type == SYM_ARRAY) {
         char array_size[256];
@@ -489,11 +504,11 @@ long unsigned int process_symbol(struct symbol *sym, long unsigned int crc, int 
     if (sym->ident) {
         tsym = find_sym_using_typedef(sym->ident->name, parsym);
         if (tsym != NULL) { /* Symbol's type is defined by a typedef */
-            crc = process_symbol_using_typedef(sym, crc);
+            crc = process_symbol_using_typedef(sym, crc, is_fn_param);
             parsym = NULL;
             return crc;
         } else {
-            parsym = sym;
+            alloc_parsym(sym, 0);
         }
     }
 
@@ -558,7 +573,9 @@ long unsigned int process_symbol(struct symbol *sym, long unsigned int crc, int 
             crc = crc32(sym->ident->name, crc);
             params = sym->arguments;
             crc = crc32("(", crc);
+            alloc_parsym(sym, SYM_FN);
             crc = process_params(params, crc);
+            parsym = NULL;
             crc = crc32(")", crc);
             break;
         case SYM_UNION:
