@@ -629,8 +629,16 @@ char *token_str(struct token *tok)
                 tok_name = "}";
             else if (match_op(tok, ','))
                 tok_name = ",";
+            else if (match_op(tok, '*'))
+                tok_name = "*";
+            else if (match_op(tok, '('))
+                tok_name = "(";
+            else if (match_op(tok, ')'))
+                tok_name = ")";
             else
                 tok_name = show_special(tok->special);
+        } else if (token_type(tok) == TOKEN_NUMBER) {
+            tok_name = tok->number;
         } else {
             tok_name = tok->ident->name;
         }
@@ -2839,25 +2847,7 @@ struct token *external_declaration(struct token *token, struct symbol_list **lis
 
 	/* Parse declaration-specifiers, if any */
 	token = declaration_specifiers(token, &ctx);
-    char *tok_name;
-    if (token_type(token) == TOKEN_STRING) {
-        tok_name = show_char(token->string->data,
-        token->string->length - 1, 0, '"');
-    } else if (token_type(token) == TOKEN_SPECIAL) {
-        if (match_op(token, ';'))
-            tok_name = ";";
-        else if (match_op(token, '{'))
-            tok_name = "{";
-        else if (match_op(token, '}'))
-            tok_name = "}";
-        else if (match_op(token, ','))
-            tok_name = ",";
-        else
-            tok_name = show_special(token->special);
-    } else {
-        if (token->ident)
-            tok_name = token->ident->name;
-    }
+    char *tok_name = token_str(token);
 
     if (is_tok_typedef == 1) {
         if (is_type_typedef == 1 && token->ident) {
@@ -3259,30 +3249,8 @@ void add_token_name_to_sym_decl(struct token *tok)
         return;
     }
 
-    char *tok_name;
+    char *tok_name = token_str(tok);
     enum token_type tok_type = token_type(tok);
-    if (tok->ident) {
-        if (token_type(tok) == TOKEN_STRING) {
-            tok_name = show_char(tok->string->data,
-            tok->string->length - 1, 0, '"');
-        } else if (token_type(tok) == TOKEN_SPECIAL) {
-            if (match_op(tok, ';'))
-                tok_name = ";";
-            else if (match_op(tok, '{'))
-                tok_name = "{";
-            else if (match_op(tok, '}'))
-                tok_name = "}";
-            else if (match_op(tok, ','))
-                tok_name = ",";
-            else
-                tok_name = show_special(tok->special);
-        } else {
-            tok_name = tok->ident->name;
-        }
-    } else {
-        printf("Token has no ident\n");
-        return;
-    }
 
     struct decl_list *dec, *temp;
 
