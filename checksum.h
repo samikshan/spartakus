@@ -80,28 +80,11 @@ static const unsigned int crctab32[] = {
     0x2d02ef8dU
 };
 
-static unsigned long partial_crc32_one(unsigned char c, unsigned long crc)
-{
-    return crctab32[(crc ^ c) & 0xff] ^ (crc >> 8);
-}
+unsigned long partial_crc32_one(unsigned char c, unsigned long crc);
 
-static unsigned long partial_crc32(const char *s, unsigned long crc)
-{
-    while (*s)
-        crc = partial_crc32_one(*s++, crc);
-    return crc;
-}
+unsigned long partial_crc32(const char *s, unsigned long crc);
 
-static unsigned long crc32(const char *s, unsigned long int crc)
-{
-    crc = partial_crc32(s, crc);
-    crc = partial_crc32_one(' ', crc);
-    return crc;
-}
+unsigned long crc32(const char *s, unsigned long int crc);
 
-static unsigned long raw_crc32(const char *s)
-{
-    return partial_crc32(s, 0xffffffff) ^ 0xffffffff;
-}
-
+unsigned long raw_crc32(const char *s);
 /*----------------------------------------------------------------------------*/

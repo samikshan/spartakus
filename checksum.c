@@ -20,3 +20,29 @@
  * this program; if not, write to the Free Software Foundation, Inc., 51
  * Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+
+#include "checksum.h"
+
+unsigned long partial_crc32_one(unsigned char c, unsigned long crc)
+{
+    return crctab32[(crc ^ c) & 0xff] ^ (crc >> 8);
+}
+
+unsigned long partial_crc32(const char *s, unsigned long crc)
+{
+    while (*s)
+        crc = partial_crc32_one(*s++, crc);
+    return crc;
+}
+
+unsigned long crc32(const char *s, unsigned long int crc)
+{
+    crc = partial_crc32(s, crc);
+    crc = partial_crc32_one(' ', crc);
+    return crc;
+}
+
+unsigned long raw_crc32(const char *s)
+{
+    return partial_crc32(s, 0xffffffff) ^ 0xffffffff;
+}
