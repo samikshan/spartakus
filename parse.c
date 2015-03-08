@@ -56,7 +56,7 @@ int is_tok_typedef = 0;  /* Is it a typedef declaration */
 int is_type_typedef = 0; /* Is the symbol is of some typedef type */
 
 struct typedef_sym *symtype_typedef; /* typedef set as a type for another symbol */
-static struct par_sym *parsym = NULL;
+static struct par_sym *parsym;
 
 static struct token *statement(struct token *token, struct statement **tree);
 static struct token *handle_attributes(struct token *token, struct decl_state *ctx, unsigned int keywords);
@@ -1777,10 +1777,12 @@ static struct token *direct_declarator(struct token *token, struct decl_state *c
 	struct ident **p = ctx->ident;
 
 	if (ctx->ident && token_type(token) == TOKEN_IDENT) {
-        parsym = (struct par_sym *) malloc(sizeof(struct par_sym));
-        if (token->ident) {
-            parsym->name = token->ident->name;
-            parsym->sym_type = SYM_FN;
+        if (!parsym) {
+            parsym = (struct par_sym *) malloc(sizeof(struct par_sym));
+            if (token->ident) {
+                parsym->name = token->ident->name;
+                parsym->sym_type = SYM_FN;
+            }
         }
         *ctx->ident = token->ident;
 		token = token->next;
@@ -1807,11 +1809,13 @@ static struct token *direct_declarator(struct token *token, struct decl_state *c
 			token = identifier_list(token, fn);
 		else if (kind == Proto)
 			token = parameter_type_list(token, fn);
+
         parsym = NULL;
-		token = expect(token, ')', "in function declarator");
+        token = expect(token, ')', "in function declarator");
 		fn->endpos = token->pos;
 		return token;
 	}
+	parsym = NULL;
 
 	while (match_op(token, '[')) {
 		struct symbol *array;
@@ -1975,6 +1979,7 @@ static struct token *parameter_declaration(struct token *token, struct symbol *s
         add_typedef_type_sym(token_str(token), parsym, symtype_typedef);
         symtype_typedef = NULL;
         is_type_typedef = 0;
+        parsym = NULL;
     }
     token = declarator(token, &ctx);
     clear_sym_declaration(&sym_declaration);
@@ -1986,6 +1991,7 @@ static struct token *parameter_declaration(struct token *token, struct symbol *s
 	sym->forced_arg = ctx.storage_class == SForced;
     is_type_typedef = 0;
     symtype_typedef = NULL;
+    parsym = NULL;
 	return token;
 }
 
@@ -2833,8 +2839,6 @@ struct token *external_declaration(struct token *token, struct symbol_list **lis
 	unsigned long mod;
 	int is_typedef;
 
-    struct decl_list *sym_decl;
-
     /* Top-level inline asm? */
 	if (token_type(token) == TOKEN_IDENT) {
 		struct symbol *s = lookup_keyword(token->ident, NS_KEYWORD);
@@ -3228,7 +3232,8 @@ void display_syms_using_typedefs()
     struct sym_using_typedef *tsym;
     for (i = 0; i < HASH_BUCKETS; i++) {
         tsym = symbols_using_typedefs[i];
-        if (tsym == 0) continue;
+        if (tsym == 0)
+            continue;
         else {
             while (tsym) {
                 printf("%s --> ", tsym->name);

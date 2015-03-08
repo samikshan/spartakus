@@ -1,7 +1,7 @@
 
 /* spartakus generates checksums for exported kernel symbols using sparse
  *
- * Copyright (C) 2014  Red Hat Inc.
+ * Copyright (C) 2014 - 2015  Red Hat Inc.
  * Author: Samikshan Bairagya <sbairagy@redhat.com>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -446,7 +446,6 @@ void clear_expanded_typedef_list()
 
 long unsigned int process_typedef(struct typedef_sym *symtype, long unsigned int crc)
 {
-//     printf("Processing typedef %s\n", symtype->name);
     struct decl_list *defn = symtype->defn;
     if (find_expanded_typedef(symtype) != NULL) {
         crc = crc32(symtype->name, crc);
@@ -473,7 +472,6 @@ long unsigned int process_typedef(struct typedef_sym *symtype, long unsigned int
 
 long unsigned int process_symbol_using_typedef(struct symbol *sym, long unsigned int crc, int is_fn_param)
 {
-//     printf("Symbol %s uses typedef defined type %s\n", sym->ident->name, tsym->type->name);
     struct typedef_sym *symtype = tsym->type;
     if (find_expanded_typedef(tsym->type) == NULL) {
         crc = process_typedef(symtype, crc);
@@ -538,8 +536,6 @@ long unsigned int process_symbol(struct symbol *sym, long unsigned int crc, int 
 
     enum type symtype;
 
-//     if (sym->ident != NULL)
-        //printf("Symbol: %s | Type: %s\n", sym->ident->name, sym_type(sym));
     symtype = sym->type;
 
     if (symtype != SYM_PTR && symtype != SYM_ARRAY && symtype != SYM_FN) {
@@ -547,7 +543,6 @@ long unsigned int process_symbol(struct symbol *sym, long unsigned int crc, int 
             struct symb *s = find_sym(sym);
 
             if (s != NULL) {
-                //printf("Symbol %s found in symbol table\n", s->sym_name);
                 crc = crc32(sym_type(sym), crc);
                 if (is_fn_param == 0 && sym->ident != NULL)
                     crc = crc32(sym->ident->name, crc);
@@ -615,7 +610,7 @@ void process_symlist(struct symbol_list *symlist)
 
     FOR_EACH_PTR(symlist, sym)
     {
-        if(is_exported(sym) == 1) // If sym is in list of exported symbols
+        if(is_exported(sym) == 1)
         {
             long unsigned int crc = process_symbol(sym,
                                                    0xffffffff, 0) ^ 0xffffffff;
@@ -624,7 +619,6 @@ void process_symlist(struct symbol_list *symlist)
             clear_sym_table();
         }
     }END_FOR_EACH_PTR(sym);
-    //display_sym_table();
 }
 
 void populate_exp_symlist(struct symbol_list *symlist)
@@ -632,16 +626,12 @@ void populate_exp_symlist(struct symbol_list *symlist)
     struct symbol *sym;
     FOR_EACH_PTR(symlist, sym)
     {
-        // Symbol name beginning with __ksymtab_ is an exported symbol
+        /* Symbol name beginning with __ksymtab_ is an exported symbol */
         if (sym->ident == NULL)
             return;
         if (starts_with(sym->ident->name, "__ksymtab_"))
-        {
-            //printf("Adding %s to list of exported symbols\n", sym->ident->name);
             add_symbol(&exported_symbols, sym);
-        }
     }END_FOR_EACH_PTR(sym);
-    //show_exp_sym_names(); // show list of exported symbols
 }
 
 void process_files(struct string_list* filelist)
@@ -652,11 +642,9 @@ void process_files(struct string_list* filelist)
     FOR_EACH_PTR_NOTAG(filelist, file)
     {
         symlist = sparse(file);
-//         display_typedef_symtab();
         clean_up_symbols(symlist);
         populate_exp_symlist(symlist);
         process_symlist(symlist);
-        //display_sym_table();
         clear_typedef_symtab();
     }END_FOR_EACH_PTR_NOTAG(file);
 }
